@@ -2,13 +2,8 @@ use std::f64::consts::{E, LN_2};
 use image::{RgbImage, Rgb, imageops};
 
 fn main() {
-    // let f = |x| x * x - 3.0;
-    // let d = |x| 2.0 * x;
     // let f = |x| (x - 1.0) * (x + 2.0) * (x + 0.4) * (x - 0.2) * (x + 0.8);
     // let d = |x| (5.0*x*x*x*x) + (8.0*x*x*x) - ((69.0*x*x)/25.0) - ((496.0*x)/125.0) - 0.224;
-
-    // let zero = newton(f, d, -1.0, 10);
-    // println!("{zero}");
 
     let mut input = String::new();
 
@@ -63,7 +58,7 @@ fn main() {
     graph(f7, &mut img, scale, Rgb([128, 128, 128]), thickness);
 
     imageops::flip_vertical_in_place(&mut img);
-    img.save("out.png").expect("Failed ot save image");
+    img.save("out.png").expect("Failed to save image");
 }
 
 fn draw_axes(buf: &mut RgbImage, thickness: i32) {
@@ -127,7 +122,7 @@ fn draw_line(buf: &mut RgbImage, mut p1: (f64, f64), mut p2: (f64, f64), color: 
         false
     };
 
-    // if (dx, dy) as length 1, we must iterate as many times as that will fit into the whole path
+    // if (dx, dy) has length `STEP_VEC_LEN`, we must iterate as many times as that will fit into the whole path from p1 to p2
     for _ in 0..(len / STEP_VEC_LEN) as u32 {
         let (x, y) = (current_x as i32, current_y as i32);
         let mut quit = false;
@@ -168,6 +163,7 @@ fn sqrt(a: f64) -> f64 {
     newton(f, d, approx, 5)
 }
 
+// performs `iters` newton iterations on the function `f` with derivative `d`
 fn newton<F, D>(f: F, d: D, initial_guess: f64, iters: u32) -> f64
     where F: Fn(f64) -> f64,
         D: Fn(f64) -> f64
@@ -181,6 +177,7 @@ fn newton<F, D>(f: F, d: D, initial_guess: f64, iters: u32) -> f64
     zero
 }
 
+// calculates b^e
 fn pow(b: f64, e: f64) -> f64 {
     // explicit cases (most work fine but not all like 0^x)
     if e == 1.0 {
@@ -203,7 +200,7 @@ fn pow(b: f64, e: f64) -> f64 {
 }
 
 fn ln(a: f64) -> f64 {
-    // ln(1 + x) = ln(2)x-ln(2) approximation correction value
+    // ln(1 + x) = ln(2)x-ln(2) approximation correction value for smallest average error
     const U: f64 = 0.03;
     // maximum mantissa value (2^52)
     const MANT: f64 = 4503599627370496.0;
@@ -220,7 +217,7 @@ fn ln(a: f64) -> f64 {
     newton(f, d, approx, 5)
 }
 
-// e^x
+// calculates e^x
 fn exp(x: f64) -> f64 {
     let i = x.trunc() as i64;
     let f = x.fract();
