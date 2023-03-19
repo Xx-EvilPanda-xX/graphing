@@ -17,16 +17,25 @@ fn main() {
     let b: f64 = input.trim().parse().expect("Failed to parse input");
     input.clear();
 
-    println!("Enter an exponent for exponentiation: ");
+    println!("Enter an exponent for exponentiation:");
     std::io::stdin().read_line(&mut input).unwrap();
     let e: f64 = input.trim().parse().expect("Failed to parse input");
     input.clear();
 
+    println!("Enter a size in pixels for the graph:");
+    std::io::stdin().read_line(&mut input).unwrap();
+    let size = input.trim().parse().expect("Failed to parse input");
+    input.clear();
+
+    println!("Enter a line thickness for graphing:");
+    std::io::stdin().read_line(&mut input).unwrap();
+    let thickness = input.trim().parse().expect("Failed to parse input");
+    input.clear();
+
     println!("std pow: {}, custom pow: {}", b.powf(e), pow(b, e));
 
-    const SIZE: u32 = 5000;
-    let mut img = RgbImage::new(SIZE, SIZE);
-    draw_axes(&mut img);
+    let mut img = RgbImage::new(size, size);
+    draw_axes(&mut img, thickness);
 
     let f1 = |x| pow(2.22222, x);
     let f2 = |x| sqrt(x);
@@ -36,58 +45,56 @@ fn main() {
     let f6 = |x| ln(x);
     let f7 = |x| LN_2 * x - LN_2;
 
-    let scale = 10.0 / SIZE as f64;
+    let scale = 10.0 / size as f64;
 
     println!("Graphing f1!");
-    graph(f1, &mut img, scale, Rgb([255, 0, 0]));
+    graph(f1, &mut img, scale, Rgb([255, 0, 0]), thickness);
     println!("Graphing f2!");
-    graph(f2, &mut img, scale, Rgb([0, 255, 0]));
+    graph(f2, &mut img, scale, Rgb([0, 255, 0]), thickness);
     println!("Graphing f3!");
-    graph(f3, &mut img, scale, Rgb([0, 0, 255]));
+    graph(f3, &mut img, scale, Rgb([0, 0, 255]), thickness);
     println!("Graphing f4!");
-    graph(f4, &mut img, scale, Rgb([255, 0, 255]));
+    graph(f4, &mut img, scale, Rgb([255, 0, 255]), thickness);
     println!("Graphing f5!");
-    graph(f5, &mut img, scale, Rgb([0, 255, 255]));
+    graph(f5, &mut img, scale, Rgb([0, 255, 255]), thickness);
     println!("Graphing f6!");
-    graph(f6, &mut img, scale, Rgb([255, 255, 0]));
+    graph(f6, &mut img, scale, Rgb([255, 255, 0]), thickness);
     println!("Graphing f7!");
-    graph(f7, &mut img, scale, Rgb([128, 128, 128]));
+    graph(f7, &mut img, scale, Rgb([128, 128, 128]), thickness);
 
     imageops::flip_vertical_in_place(&mut img);
     img.save("out.png").expect("Failed ot save image");
 }
 
-fn draw_axes(buf: &mut RgbImage) {
-    for i in 0..buf.width() {
-        buf.put_pixel(i, buf.height() / 2, Rgb([255; 3]));
-    }
+fn draw_axes(buf: &mut RgbImage, thickness: i32) {
+    let half_w = buf.width() as f64 / 2.0;
+    let half_h = buf.height() as f64 / 2.0;
 
-    for i in 0..buf.height() {
-        buf.put_pixel(buf.width() / 2, i, Rgb([255; 3]));
-    }
+    draw_line(buf, (0.0, half_h), (half_w * 2.0, half_h), Rgb([255; 3]), thickness, false);
+    draw_line(buf, (half_w, 0.0), (half_w, half_h * 2.0), Rgb([255; 3]), thickness, false);
 }
 
-fn graph<F: Fn(f64) -> f64>(f: F, buf: &mut RgbImage, scale: f64, color: Rgb<u8>) {
-    for i in 0..buf.width() {
-        let x1 = (i as f64 - buf.width() as f64 / 2.0) * scale;
-        // divide by scale to bring output back to screen coords
-        let y1 = f(x1) / scale;
+fn graph<F: Fn(f64) -> f64>(f: F, buf: &mut RgbImage, scale: f64, color: Rgb<u8>, thickness: i32) {
+    let half_w = buf.width() as f64 / 2.0;
+    let half_h = buf.height() as f64 / 2.0;
 
-        let x2 = ((i + 1) as f64 - buf.width() as f64 / 2.0) * scale;
-        let y2 = f(x2) / scale;
+    for x in 0..buf.width() {
+        let x1 = (x as f64 - half_w) * scale;
+        // divide by scale to bring output back to screen coords
+        let y1 = f(x1) / scale + half_h;
+
+        let x2 = ((x + 1) as f64 - half_w) * scale;
+        let y2 = f(x2) / scale + half_h;
 
         if y1.is_nan() || y2.is_nan() {
             continue;
         }
 
-        let y1 = y1 + buf.height() as f64 / 2.0;
-        let y2 = y2 + buf.height() as f64 / 2.0;
-
-        draw_line(buf, (i as f64, y1), ((i + 1) as f64, y2), color);
+        draw_line(buf, (x as f64, y1), ((x + 1) as f64, y2), color, thickness, true);
     }
 }
 
-fn draw_line(buf: &mut RgbImage, mut p1: (f64, f64), mut p2: (f64, f64), color: Rgb<u8>) {
+fn draw_line(buf: &mut RgbImage, mut p1: (f64, f64), mut p2: (f64, f64), color: Rgb<u8>, thickness: i32, can_quit: bool) {
     let w = buf.width() as i32;
     let h = buf.height() as i32;
 
@@ -97,15 +104,16 @@ fn draw_line(buf: &mut RgbImage, mut p1: (f64, f64), mut p2: (f64, f64), color: 
     }
 
     // direction vector (p1 -> p2)
-    let mut dx = p2.0 - p1.0;
-    let mut dy = p2.1 - p1.1;
+    let mut vx = p2.0 - p1.0;
+    let mut vy = p2.1 - p1.1;
 
-    const STEP_VEC_LEN: f64 = 0.1;
+    // how big should each step be? (smaller = nicer line)
+    const STEP_VEC_LEN: f64 = 0.25;
 
     // normalize vector to length STEP_VEC_LEN
-    let len = sqrt(dx * dx + dy * dy);
-    dx *= STEP_VEC_LEN / len;
-    dy *= STEP_VEC_LEN / len;
+    let len = sqrt(vx * vx + vy * vy);
+    vx *= STEP_VEC_LEN / len;
+    vy *= STEP_VEC_LEN / len;
 
     let mut current_x = p1.0;
     let mut current_y = p1.1;
@@ -123,19 +131,23 @@ fn draw_line(buf: &mut RgbImage, mut p1: (f64, f64), mut p2: (f64, f64), color: 
     for _ in 0..(len / STEP_VEC_LEN) as u32 {
         let (x, y) = (current_x as i32, current_y as i32);
         let mut quit = false;
-        quit |= try_put_pixel(x, y, color);
-        quit |= try_put_pixel(x + 1, y, color);
-        quit |= try_put_pixel(x, y + 1, color);
-        quit |= try_put_pixel(x - 1, y, color);
-        quit |= try_put_pixel(x, y - 1, color);
 
-        if quit {
+        // color only the pixels within a radius `thickness` of our pixel
+        for dx in x - thickness..x + thickness {
+            for dy in y - thickness..y + thickness {
+                if (dx - x) * (dx - x) + (dy - y) * (dy - y) < thickness * thickness {
+                    quit |= try_put_pixel(dx, dy, color);
+                }
+            }
+        }
+
+        if quit && can_quit {
             return;
         }
 
         // step forward
-        current_x += dx;
-        current_y += dy;
+        current_x += vx;
+        current_y += vy;
     }
 }
 
@@ -216,7 +228,7 @@ fn exp(x: f64) -> f64 {
     powi(E, i) * exp_taylor(f)
 }
 
-// e^x approximated as a taylor series
+// e^x approximated as a taylor polynomial
 // only guaranteed to be accurate from -1 to 1
 fn exp_taylor(x: f64) -> f64 {
     const TERMS: i64 = 20;
