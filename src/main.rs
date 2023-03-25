@@ -1,33 +1,20 @@
-use std::f64::consts::{E, LN_2};
+use std::{f64::consts::{E, LN_2}, fmt::Debug, str::FromStr};
 use image::{RgbImage, Rgb, imageops};
 
 fn main() {
     // let f = |x| (x - 1.0) * (x + 2.0) * (x + 0.4) * (x - 0.2) * (x + 0.8);
     // let d = |x| (5.0*x*x*x*x) + (8.0*x*x*x) - ((69.0*x*x)/25.0) - ((496.0*x)/125.0) - 0.224;
 
-    let mut input = String::new();
+    let b: f64 = input("Enter a base for exponentiation:");
+    let e: f64 = input("Enter an exponent for exponentiation:");
 
-    println!("Enter a base for exponentiation:");
-    std::io::stdin().read_line(&mut input).unwrap();
-    let b: f64 = input.trim().parse().expect("Failed to parse input");
-    input.clear();
+    let (std, custom) = (b.powf(e), pow(b, e));
+    println!("std pow: {}, custom pow: {}", std, custom);
+    println!("std pow bits: {:#010b}, custom pow bits: {:#010b}", std.to_bits(), custom.to_bits());
 
-    println!("Enter an exponent for exponentiation:");
-    std::io::stdin().read_line(&mut input).unwrap();
-    let e: f64 = input.trim().parse().expect("Failed to parse input");
-    input.clear();
-
-    println!("Enter a size in pixels for the graph:");
-    std::io::stdin().read_line(&mut input).unwrap();
-    let size = input.trim().parse().expect("Failed to parse input");
-    input.clear();
-
-    println!("Enter a line thickness for graphing:");
-    std::io::stdin().read_line(&mut input).unwrap();
-    let thickness = input.trim().parse().expect("Failed to parse input");
-    input.clear();
-
-    println!("std pow: {}, custom pow: {}", b.powf(e), pow(b, e));
+    let size = input("Enter a size in pixels for the graph:");
+    let thickness = input("Enter a line thickness for graphing:");
+    let bound: f64 = input("Enter a bound for graphing:");
 
     let mut img = RgbImage::new(size, size);
     draw_axes(&mut img, thickness);
@@ -37,10 +24,12 @@ fn main() {
     let f3 = |x| (x - 1.0) * (x + 2.0) * (x + 0.4) * (x - 0.2) * (x + 0.8);
     let f4 = |x| pow(x, x);
     let f5 = |x| 1.0 / x;
-    let f6 = |x| ln(x);
-    let f7 = |x| LN_2 * x - LN_2;
+    let f6 = |x| log(2.0, x);
+    let f7 = |x| sqrt(1.0 - x * x);
+    let f8 = |x| -sqrt(1.0 - x * x);
+    let f9 = |x| LN_2 * x - LN_2;
 
-    let scale = 10.0 / size as f64;
+    let scale = bound / size as f64;
 
     println!("Graphing f1!");
     graph(f1, &mut img, scale, Rgb([255, 0, 0]), thickness);
@@ -56,9 +45,23 @@ fn main() {
     graph(f6, &mut img, scale, Rgb([255, 255, 0]), thickness);
     println!("Graphing f7!");
     graph(f7, &mut img, scale, Rgb([128, 128, 128]), thickness);
+    println!("Graphing f8!");
+    graph(f8, &mut img, scale, Rgb([128, 128, 128]), thickness);
+    println!("Graphing f9!");
+    graph(f9, &mut img, scale, Rgb([255, 128, 0]), thickness);
 
     imageops::flip_vertical_in_place(&mut img);
     img.save("out.png").expect("Failed to save image");
+}
+
+fn input<T>(prompt: &str) -> T
+    where T: FromStr,
+        T::Err: Debug
+{
+    println!("{prompt}");
+    let mut buf = String::new();
+    std::io::stdin().read_line(&mut buf).expect("Failed to read line");
+    buf.trim().parse().expect("Failed to parse input")
 }
 
 fn draw_axes(buf: &mut RgbImage, thickness: i32) {
@@ -75,7 +78,7 @@ fn graph<F: Fn(f64) -> f64>(f: F, buf: &mut RgbImage, scale: f64, color: Rgb<u8>
 
     for x in 0..buf.width() {
         let x1 = (x as f64 - half_w) * scale;
-        // divide by scale to bring output back to screen coords
+        // divide by scale to bring output back to screen coords, clamp to i32 range to avoid overflow later
         let y1 = f(x1) / scale + half_h;
 
         let x2 = ((x + 1) as f64 - half_w) * scale;
@@ -93,8 +96,9 @@ fn draw_line(buf: &mut RgbImage, mut p1: (f64, f64), mut p2: (f64, f64), color: 
     let w = buf.width() as i32;
     let h = buf.height() as i32;
 
-    // ensure our starting point is not outside the image (if the ending point isn't)
-    if p1.0 >= w as f64 || p1.0 < 0.0 || p1.1 >= h as f64 || p1.1 < 0.0 {
+    // ensure our starting point isn't gonna immediately trigger a quit from trying to render outside the image
+    let t = thickness as f64;
+    if p1.0 + t >= w as f64 || p1.0 - t < 0.0 || p1.1 + t >= h as f64 || p1.1 - t < 0.0 {
         std::mem::swap(&mut p1, &mut p2);
     }
 
@@ -124,6 +128,10 @@ fn draw_line(buf: &mut RgbImage, mut p1: (f64, f64), mut p2: (f64, f64), color: 
 
     // if (dx, dy) has length `STEP_VEC_LEN`, we must iterate as many times as that will fit into the whole path from p1 to p2
     for _ in 0..(len / STEP_VEC_LEN) as u32 {
+        if current_x > i32::MAX as f64 || current_x < i32::MIN as f64|| current_y > i32::MAX as f64 || current_y < i32::MIN as f64 {
+            return;
+        }
+
         let (x, y) = (current_x as i32, current_y as i32);
         let mut quit = false;
 
@@ -177,7 +185,12 @@ fn newton<F, D>(f: F, d: D, initial_guess: f64, iters: u32) -> f64
     zero
 }
 
-// calculates b^e
+// calculates log_b(a)
+fn log(b: f64, a: f64) -> f64 {
+    ln(a) / ln(b)
+}
+
+// calculates b^u
 fn pow(b: f64, e: f64) -> f64 {
     // explicit cases (most work fine but not all like 0^x)
     if e == 1.0 {
@@ -201,7 +214,7 @@ fn pow(b: f64, e: f64) -> f64 {
 
 fn ln(a: f64) -> f64 {
     // ln(1 + x) = ln(2)x-ln(2) approximation correction value for smallest average error
-    const U: f64 = 0.03;
+    const U: f64 = 0.03972;
     // maximum mantissa value (2^52)
     const MANT: f64 = 4503599627370496.0;
 
