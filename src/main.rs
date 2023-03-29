@@ -1,16 +1,21 @@
-use std::{f64::consts::{E, LN_2}, fmt::Debug, str::FromStr};
+use std::{f64::consts::{E, LN_2, PI}, fmt::Debug, str::FromStr};
 use image::{RgbImage, Rgb, imageops};
 
 fn main() {
     // let f = |x| (x - 1.0) * (x + 2.0) * (x + 0.4) * (x - 0.2) * (x + 0.8);
     // let d = |x| (5.0*x*x*x*x) + (8.0*x*x*x) - ((69.0*x*x)/25.0) - ((496.0*x)/125.0) - 0.224;
 
+    // area under tan(x) from 0 to 1
+    println!("{}", -ln(cos(1.0)));
+
     let b: f64 = input("Enter a base for exponentiation:");
     let e: f64 = input("Enter an exponent for exponentiation:");
 
     let (std, custom) = (b.powf(e), pow(b, e));
     println!("std pow: {}, custom pow: {}", std, custom);
-    println!("std pow bits: {:#010b}, custom pow bits: {:#010b}", std.to_bits(), custom.to_bits());
+    println!("std sin: {}, custom sin: {}", std.sin(), sin(custom));
+    println!("std cos: {}, custom cos: {}", std.cos(), cos(custom));
+    println!("std tan: {}, custom tan: {}", std.tan(), tan(custom));
 
     let size = input("Enter a size in pixels for the graph:");
     let thickness = input("Enter a line thickness for graphing:");
@@ -25,8 +30,8 @@ fn main() {
     let f4 = |x| pow(x, x);
     let f5 = |x| 1.0 / x;
     let f6 = |x| log(2.0, x);
-    let f7 = |x| sqrt(1.0 - x * x);
-    let f8 = |x| -sqrt(1.0 - x * x);
+    let f7 = |x| tan(x);
+    let f8 = |x| sin(cos(x));
     let f9 = |x| LN_2 * x - LN_2;
 
     let scale = bound / size as f64;
@@ -44,7 +49,7 @@ fn main() {
     println!("Graphing f6!");
     graph(f6, &mut img, scale, Rgb([255, 255, 0]), thickness);
     println!("Graphing f7!");
-    graph(f7, &mut img, scale, Rgb([128, 128, 128]), thickness);
+    graph(f7, &mut img, scale, Rgb([0, 255, 128]), thickness);
     println!("Graphing f8!");
     graph(f8, &mut img, scale, Rgb([128, 128, 128]), thickness);
     println!("Graphing f9!");
@@ -128,7 +133,7 @@ fn draw_line(buf: &mut RgbImage, mut p1: (f64, f64), mut p2: (f64, f64), color: 
 
     // if (dx, dy) has length `STEP_VEC_LEN`, we must iterate as many times as that will fit into the whole path from p1 to p2
     for _ in 0..(len / STEP_VEC_LEN) as u32 {
-        if current_x > i32::MAX as f64 || current_x < i32::MIN as f64|| current_y > i32::MAX as f64 || current_y < i32::MIN as f64 {
+        if current_x + t > i32::MAX as f64 || current_x - t < i32::MIN as f64 || current_y + t > i32::MAX as f64 || current_y - t < i32::MIN as f64 {
             return;
         }
 
@@ -190,7 +195,7 @@ fn log(b: f64, a: f64) -> f64 {
     ln(a) / ln(b)
 }
 
-// calculates b^u
+// calculates b^e
 fn pow(b: f64, e: f64) -> f64 {
     // explicit cases (most work fine but not all like 0^x)
     if e == 1.0 {
@@ -275,4 +280,76 @@ fn f(i: u64) -> f64 {
     }
 
     result
+}
+
+fn tan(x: f64) -> f64 {
+    sin(x) / cos(x)
+}
+
+// sin and cos of integers from -6 to 6 (approximately the period of sin and cos)
+static SIN_TABLE: [(f64, i32); 13] = [(0.27941549819892586, -6), (0.9589242746631385, -5), (0.7568024953079282, -4), (-0.1411200080598672, -3), (-0.9092974268256817, -2), (-0.8414709848078965, -1), (0.0, 0), (0.8414709848078965, 1), (0.9092974268256817, 2), (0.1411200080598672, 3), (-0.7568024953079282, 4), (-0.9589242746631385, 5), (-0.27941549819892586, 6)];
+static COS_TABLE: [(f64, i32); 13] = [(0.960170286650366, -6), (0.28366218546322625, -5), (-0.6536436208636119, -4), (-0.9899924966004454, -3), (-0.4161468365471424, -2), (0.5403023058681398, -1), (1.0, 0), (0.5403023058681398, 1), (-0.4161468365471424, 2), (-0.9899924966004454, 3), (-0.6536436208636119, 4), (0.28366218546322625, 5), (0.960170286650366, 6)];
+
+// taylor polynomial approximation of sin(x)
+fn sin(x: f64) -> f64 {
+    const TERMS: i64 = 20;
+    let x = x % (2.0 * PI);
+    let (s, a) = closest(&SIN_TABLE, x);
+    let (c, _) = closest(&COS_TABLE, x);
+
+    let mut result = 0.0;
+    for i in 0..TERMS {
+        // mod four because the derivatives of cos are cyclical with a period of 4
+        let coeff = match i % 4 {
+            0 => s,
+            1 => c,
+            2 => -s,
+            3 => -c,
+            _ => unreachable!(),
+        };
+
+        result += coeff * powi(x - a, i) / f(i as u64);
+    }
+
+    result
+}
+
+// taylor polynomial approximation of cos(x)
+fn cos(x: f64) -> f64 {
+    const TERMS: i64 = 20;
+    let x = x % (2.0 * PI);
+    let (c, a) = closest(&COS_TABLE, x);
+    let (s, _) = closest(&SIN_TABLE, x);
+
+    let mut result = 0.0;
+    for i in 0..TERMS {
+        // mod four because the derivatives of cos are cyclical with a period of 4
+        let coeff = match i % 4 {
+            0 => c,
+            1 => -s,
+            2 => -c,
+            3 => s,
+            _ => unreachable!(),
+        };
+
+        result += coeff * powi(x - a, i) / f(i as u64);
+    }
+
+    result
+}
+
+// finds the value in arr which has a arr[_].1 value closest to x
+fn closest(arr: &[(f64, i32)], x: f64) -> (f64, f64) {
+    let (mut distance, (mut num, mut pos)) = (-1.0, (0.0, 0.0));
+
+    for (i, loc) in arr {
+        let dist = (*loc as f64 - x).abs();
+        if dist < distance || distance == -1.0 {
+            distance = dist;
+            num = *i;
+            pos = *loc as f64;
+        }
+    }
+
+    (num, pos)
 }
